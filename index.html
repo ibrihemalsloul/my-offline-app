@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سوفت ERB - نظام المبيعات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="manifest" href="/manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .active-tab {
+            background-color: #fff7ed;
+            color: #ea580c;
+            box-shadow: inset 0 -2px 0 #ea580c;
+        }
+
+        .admin-only { display: none; }
+        body.is-admin .admin-only { display: block; }
+
+        .category-header {
+            grid-column: 1 / -1;
+            padding: 1.5rem 0 1rem 0;
+            font-weight: 900;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.25rem;
+            border-bottom: 2px dashed #e2e8f0;
+            margin-bottom: 1rem;
+        }
+
+        .category-img-pill {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            object-fit: cover;
+            margin-left: 8px;
+        }
+
+        .meal-card-img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 1.5rem;
+            margin-bottom: 0.75rem;
+            background: #f1f5f9;
+        }
+
+        .category-pill {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            min-width: 140px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: 900;
+            border-radius: 1.25rem;
+            border: 2px solid #f1f5f9;
+            cursor: pointer;
+            background: white;
+            padding: 0 15px;
+        }
+        .category-pill.active {
+            background-color: #ea580c;
+            color: white;
+            box-shadow: 0 10px 20px rgba(234, 88, 12, 0.3);
+            transform: translateY(-2px);
+            border-color: #ea580c;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* Custom File Input Styling */
+        .file-upload-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+        .file-upload-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #f1f5f9;
+            border: 2px dashed #cbd5e1;
+            border-radius: 1rem;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            color: #64748b;
+        }
+        .file-upload-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        @media print {
+            body * { visibility: hidden; }
+            #print-receipt, #print-receipt * { visibility: visible; }
+            #print-receipt { position: absolute; left: 0; top: 0; width: 100%; font-size: 12px; text-align: center; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="text-sm overflow-hidden select-none">
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center p-4">
+        <div class="bg-white/5 backdrop-blur-2xl rounded-[3rem] p-12 w-full max-w-md text-center border border-white/10 shadow-2xl">
+            <h2 class="text-4xl font-black mb-2 text-white italic">SOFT <span class="text-orange-500">ERB</span></h2>
+            <p class="text-slate-400 mb-10 font-medium italic">نظام الإدارة المتكامل</p>
+            <form onsubmit="handleLogin(event)" class="space-y-5 text-right">
+                <div class="space-y-1">
+                    <label class="text-white text-xs mr-2">اختيار المستخدم</label>
+                    <select id="username-select" class="w-full px-6 py-4 rounded-2xl bg-white/10 border border-white/5 text-white text-center font-bold outline-none appearance-none cursor-pointer"></select>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-white text-xs mr-2">كلمة المرور</label>
+                    <input type="password" id="login-password" placeholder="••••" class="w-full px-6 py-4 rounded-2xl bg-white/10 border border-white/5 text-white text-center font-bold outline-none focus:ring-2 focus:ring-orange-500">
+                </div>
+                <button type="submit" class="w-full bg-orange-600 text-white py-5 rounded-2xl font-black text-lg hover:bg-orange-500 transition-all shadow-2xl">دخول للنظام</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Print Area -->
+    <div id="print-receipt" class="hidden"></div>
+
+    <!-- Main Platform -->
+    <div id="main-platform" class="hidden h-screen flex flex-col">
+        <nav class="bg-white border-b px-8 py-4 flex justify-between items-center z-50 shadow-sm">
+            <div class="flex items-center gap-10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white"><i class="fas fa-rocket"></i></div>
+                    <span class="text-2xl font-black text-slate-800 italic">SOFT<span class="text-orange-600">ERB</span></span>
+                </div>
+                <div class="flex gap-2 bg-slate-100 p-1 rounded-2xl no-print">
+                    <button onclick="switchTab('pos')" id="btn-pos" class="px-6 py-2.5 rounded-xl font-bold active-tab transition-all"><i class="fas fa-cash-register ml-2"></i>الكاشير</button>
+                    <button onclick="switchTab('meals')" id="btn-meals" class="admin-only px-6 py-2.5 rounded-xl font-bold text-slate-500 transition-all"><i class="fas fa-hamburger ml-2"></i>الوجبات</button>
+                    <button onclick="switchTab('sales')" id="btn-sales" class="admin-only px-6 py-2.5 rounded-xl font-bold text-slate-500 transition-all"><i class="fas fa-chart-line ml-2"></i>المبيعات</button>
+                    <button onclick="switchTab('admin')" id="btn-admin" class="admin-only px-6 py-2.5 rounded-xl font-bold text-slate-500 transition-all"><i class="fas fa-user-shield ml-2"></i>الإدارة</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 no-print">
+                <div class="text-right">
+                    <p id="display-user-name" class="font-black text-slate-800 leading-none"></p>
+                    <span id="display-user-role" class="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md font-bold uppercase"></span>
+                </div>
+                <button onclick="location.reload()" class="bg-red-50 text-red-500 font-bold px-4 py-2 rounded-xl hover:bg-red-500 hover:text-white transition-all italic">خروج</button>
+            </div>
+        </nav>
+
+        <main class="flex-1 p-6 overflow-hidden relative">
+            
+            <!-- POS Tab -->
+            <div id="pos-tab" class="fade-in h-full grid grid-cols-12 gap-6">
+                <div class="col-span-8 flex flex-col gap-6 h-full overflow-hidden">
+                    <div id="category-bar" class="flex gap-4 overflow-x-auto p-2 no-scrollbar scroll-smooth"></div>
+                    <div class="flex-1 overflow-y-auto pr-2" id="pos-scroll-area">
+                        <div id="pos-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 pb-10"></div>
+                    </div>
+                </div>
+                
+                <div class="col-span-4 bg-white rounded-[2.5rem] border shadow-xl p-6 flex flex-col">
+                    <h3 class="font-black text-xl mb-4 border-b pb-2 flex items-center justify-between">
+                        <span>الطلب الحالي</span>
+                        <i class="fas fa-receipt text-orange-500"></i>
+                    </h3>
+                    <div id="cart-items" class="flex-1 overflow-y-auto space-y-3"></div>
+                    <div class="border-t pt-4 mt-4 space-y-3">
+                        <div class="flex justify-between font-black text-2xl px-2 italic">
+                            <span>الإجمالي:</span>
+                            <span class="text-orange-600"><span id="cart-total">0</span> ر.ي</span>
+                        </div>
+                        <button onclick="checkoutOrder()" class="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl">تأكيد البيع وطباعة</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meals Tab -->
+            <div id="meals-tab" class="hidden fade-in h-full overflow-y-auto">
+                <div class="max-w-6xl mx-auto grid grid-cols-12 gap-8">
+                    <div class="col-span-4 bg-white p-8 rounded-[2.5rem] shadow-sm border h-fit sticky top-0">
+                        <h3 class="font-black text-xl mb-6 text-orange-600 italic">إضافة منتج جديد</h3>
+                        <div class="space-y-4">
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold mr-2">القسم</label>
+                                <input type="text" id="meal-category" placeholder="اسم القسم" class="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold mr-2">أيقونة القسم (من الجهاز)</label>
+                                <div class="file-upload-wrapper">
+                                    <div class="file-upload-btn" id="cat-file-label">إختر صورة للقسم</div>
+                                    <input type="file" id="category-image-file" accept="image/*" onchange="handleFileSelect(event, 'cat-file-label')">
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold mr-2">اسم الوجبة</label>
+                                <input type="text" id="meal-name" placeholder="اسم الوجبة" class="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold mr-2">صورة الوجبة (من الجهاز)</label>
+                                <div class="file-upload-wrapper">
+                                    <div class="file-upload-btn" id="meal-file-label">إختر صورة للوجبة</div>
+                                    <input type="file" id="meal-image-file" accept="image/*" onchange="handleFileSelect(event, 'meal-file-label')">
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold mr-2">السعر</label>
+                                <input type="number" id="meal-price" placeholder="السعر ر.ي" class="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none">
+                            </div>
+                            <button onclick="addNewMeal()" class="w-full bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg">حفظ البيانات</button>
+                        </div>
+                    </div>
+                    <div class="col-span-8 bg-white p-8 rounded-[2.5rem] shadow-sm border">
+                        <h3 class="font-black text-xl mb-6 italic">إدارة الوجبات والأقسام</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-right">
+                                <thead class="bg-slate-50 text-xs">
+                                    <tr>
+                                        <th class="p-4">الصورة</th>
+                                        <th class="p-4">الوجبة</th>
+                                        <th class="p-4">القسم</th>
+                                        <th class="p-4 text-center">السعر</th>
+                                        <th class="p-4 text-center">حذف</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="meals-list" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sales Tab -->
+            <div id="sales-tab" class="hidden fade-in h-full overflow-y-auto">
+                <div class="max-w-6xl mx-auto space-y-8 pb-10">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-[2rem] border shadow-sm border-r-8 border-orange-500">
+                            <p class="text-xs text-slate-400 font-bold mb-1 italic">مبيعات اليوم</p>
+                            <h3 id="stat-total-money" class="text-3xl font-black text-slate-800 italic">0 ر.ي</h3>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] border shadow-sm border-r-8 border-blue-500">
+                            <p class="text-xs text-slate-400 font-bold mb-1 italic">إجمالي العمليات</p>
+                            <h3 id="stat-total-count" class="text-3xl font-black text-slate-800 italic">0</h3>
+                        </div>
+                        <div class="bg-slate-900 p-6 rounded-[2rem] text-white shadow-sm flex flex-col justify-center gap-2">
+                             <button onclick="archiveTodaySales()" class="w-full bg-orange-600 hover:bg-orange-700 py-2 rounded-xl text-xs font-black transition-all">ترحيل الحساب</button>
+                             <button onclick="exportToExcel()" class="w-full bg-green-600 hover:bg-green-700 py-2 rounded-xl text-xs font-black transition-all">تصدير إكسل</button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-[2.5rem] border overflow-hidden shadow-sm">
+                        <table class="w-full text-right">
+                            <thead class="bg-slate-50 text-xs font-bold text-slate-500"><tr><th class="p-5">رقم الفاتورة</th><th class="p-5">الوقت</th><th class="p-5">المبلغ</th><th class="p-5">الكاشير</th><th class="p-5 text-center">حذف</th></tr></thead>
+                            <tbody id="sales-list-body" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Tab -->
+            <div id="admin-tab" class="hidden fade-in h-full overflow-y-auto">
+                <div class="max-w-5xl mx-auto grid grid-cols-12 gap-8 pb-10">
+                    <div class="col-span-6 space-y-6">
+                        <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border">
+                            <h3 class="font-black text-xl mb-6 italic text-orange-600">تغيير كلمة السر الخاصة بك</h3>
+                            <div class="space-y-4">
+                                <input type="password" id="old-pass" placeholder="كلمة السر الحالية" class="w-full p-4 bg-slate-50 border rounded-2xl font-bold">
+                                <input type="password" id="new-pass" placeholder="كلمة السر الجديدة" class="w-full p-4 bg-slate-50 border rounded-2xl font-bold">
+                                <button onclick="changeCurrentPass()" class="w-full bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg">تحديث كلمة السر</button>
+                            </div>
+                        </div>
+                        <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border">
+                            <h3 class="font-black text-xl mb-6 italic">إضافة موظف جديد</h3>
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <input type="text" id="acc-name" placeholder="الاسم" class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold">
+                                <input type="password" id="acc-pass" placeholder="الباسورد" class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold">
+                            </div>
+                            <select id="acc-role" class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold mb-4 appearance-none"><option value="staff">موظف كاشير</option><option value="admin">مدير فرع</option></select>
+                            <button onclick="addNewAccount()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black">تفعيل الحساب</button>
+                        </div>
+                    </div>
+                    <div class="col-span-6">
+                        <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border h-full">
+                            <h3 class="font-black text-xl mb-6 italic">قائمة الموظفين</h3>
+                            <div id="accounts-list-container" class="space-y-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        const KEY_ACC = 'erb_acc_v4_file';
+        const KEY_MEALS = 'erb_meals_v4_file';
+        const KEY_SALES = 'erb_sales_v4_file';
+
+        let userSession = null;
+        let activeCart = [];
+        let selectedCategory = 'all';
+
+        // Variables to store base64 strings
+        let currentCatImageBase64 = '';
+        let currentMealImageBase64 = '';
+
+        function initSystem() {
+            if (!localStorage.getItem(KEY_ACC)) {
+                const initialAccs = [{ id: 1, name: "مدير النظام", pass: "9999", role: "admin" }];
+                localStorage.setItem(KEY_ACC, JSON.stringify(initialAccs));
+            }
+        }
+        initSystem();
+
+        const getData = (k) => JSON.parse(localStorage.getItem(k) || "[]");
+        const saveData = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+        function handleFileSelect(event, labelId) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                if (labelId === 'cat-file-label') currentCatImageBase64 = e.target.result;
+                if (labelId === 'meal-file-label') currentMealImageBase64 = e.target.result;
+                document.getElementById(labelId).innerText = "تم اختيار: " + file.name;
+                document.getElementById(labelId).style.color = "#ea580c";
+                document.getElementById(labelId).style.borderColor = "#ea580c";
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const name = document.getElementById('username-select').value;
+            const pass = document.getElementById('login-password').value;
+            const accounts = getData(KEY_ACC);
+            const found = accounts.find(a => a.name === name && a.pass === pass);
+            if (found) {
+                userSession = found;
+                document.body.className = `text-sm overflow-hidden select-none is-${found.role}`;
+                document.getElementById('display-user-name').innerText = found.name;
+                document.getElementById('display-user-role').innerText = found.role === 'admin' ? 'مدير' : 'كاشير';
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('main-platform').classList.remove('hidden');
+                renderAll();
+            } else { alert("عذراً، كلمة السر غير صحيحة"); }
+        }
+
+        function changeCurrentPass() {
+            const oldP = document.getElementById('old-pass').value;
+            const newP = document.getElementById('new-pass').value;
+            if (!oldP || !newP) return;
+            if (userSession.pass !== oldP) { alert("كلمة السر الحالية غير صحيحة"); return; }
+            let accounts = getData(KEY_ACC);
+            accounts = accounts.map(a => {
+                if (a.id === userSession.id) { a.pass = newP; userSession.pass = newP; }
+                return a;
+            });
+            saveData(KEY_ACC, accounts);
+            document.getElementById('old-pass').value = '';
+            document.getElementById('new-pass').value = '';
+            alert("تم التغيير بنجاح");
+        }
+
+        function filterByCategory(cat) {
+            selectedCategory = cat;
+            renderPosGrid();
+            document.querySelectorAll('.category-pill').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-cat') === cat);
+            });
+        }
+
+        function renderPosGrid() {
+            const meals = getData(KEY_MEALS);
+            const grid = document.getElementById('pos-grid');
+            grid.innerHTML = '';
+            const filtered = selectedCategory === 'all' ? meals : meals.filter(m => m.category === selectedCategory);
+
+            const grouped = filtered.reduce((acc, m) => {
+                const c = m.category || 'عام';
+                if(!acc[c]) acc[c] = [];
+                acc[c].push(m);
+                return acc;
+            }, {});
+
+            for (const cat in grouped) {
+                grid.innerHTML += `<div class="category-header italic"><i class="fas fa-tag text-orange-500"></i> ${cat}</div>`;
+                grouped[cat].forEach(m => {
+                    const imgTag = m.image ? `<img src="${m.image}" class="meal-card-img">` : `<div class="meal-card-img flex items-center justify-center text-orange-200"><i class="fas fa-utensils text-2xl"></i></div>`;
+                    grid.innerHTML += `
+                    <button onclick='addToCart(${JSON.stringify(m)})' class="bg-white p-3 rounded-[2.5rem] border shadow-sm hover:border-orange-500 transition-all text-center group overflow-hidden">
+                        ${imgTag}
+                        <div class="px-2 pb-2">
+                            <p class="font-black text-slate-800 mb-0.5 truncate text-sm">${m.name}</p>
+                            <p class="text-orange-600 font-black text-base italic">${m.price} <span class="text-[9px]">ر.ي</span></p>
+                        </div>
+                    </button>`;
+                });
+            }
+        }
+
+        function renderAll() {
+            const accs = getData(KEY_ACC);
+            const meals = getData(KEY_MEALS);
+            const sales = getData(KEY_SALES);
+
+            document.getElementById('username-select').innerHTML = accs.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+
+            const catBar = document.getElementById('category-bar');
+            const catMap = {};
+            meals.forEach(m => {
+                if(!catMap[m.category]) catMap[m.category] = m.catImage || '';
+            });
+
+            catBar.innerHTML = `<button onclick="filterByCategory('all')" data-cat="all" class="category-pill active">الكل</button>`;
+            Object.keys(catMap).forEach(cat => {
+                const imgStr = catMap[cat] ? `<img src="${catMap[cat]}" class="category-img-pill">` : '';
+                catBar.innerHTML += `<button onclick="filterByCategory('${cat}')" data-cat="${cat}" class="category-pill">${imgStr}${cat}</button>`;
+            });
+
+            renderPosGrid();
+
+            document.getElementById('sales-list-body').innerHTML = [...sales].reverse().map(s => `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4 font-black text-slate-400">#${s.inv}</td>
+                    <td class="p-4 text-slate-500 font-bold text-xs">${s.time}</td>
+                    <td class="p-4 font-black text-green-600">${s.total} ر.ي</td>
+                    <td class="p-4 text-xs font-bold text-slate-400">${s.cashier}</td>
+                    <td class="p-4 text-center"><button onclick="deleteSale(${s.id})" class="text-red-300 hover:text-red-500"><i class="fas fa-trash-alt"></i></button></td>
+                </tr>`).join('');
+
+            document.getElementById('stat-total-money').innerText = `${sales.reduce((a, b) => a + b.total, 0)} ر.ي`;
+            document.getElementById('stat-total-count').innerText = sales.length;
+
+            document.getElementById('meals-list').innerHTML = meals.map(m => `
+                <tr class="text-xs">
+                    <td class="p-4"><img src="${m.image || ''}" class="w-10 h-10 rounded-lg object-cover" onerror="this.src='https://placehold.co/40x40'"></td>
+                    <td class="p-4 font-bold">${m.name}</td>
+                    <td class="p-4 font-black text-orange-600 italic">${m.category}</td>
+                    <td class="p-4 text-center font-black">${m.price} ر.ي</td>
+                    <td class="p-4 text-center"><button onclick="deleteMeal(${m.id})" class="text-red-400"><i class="fas fa-trash"></i></button></td>
+                </tr>`).join('');
+
+            document.getElementById('accounts-list-container').innerHTML = accs.map(a => `
+                <div class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black">${a.name[0]}</div>
+                        <div>
+                            <p class="font-black text-slate-800 leading-none">${a.name}</p>
+                            <span class="text-[10px] text-slate-400 font-bold">${a.role === 'admin' ? 'مدير' : 'كاشير'}</span>
+                        </div>
+                    </div>
+                    ${a.name !== "مدير النظام" ? `<button onclick="deleteAccount(${a.id})" class="text-red-300 hover:text-red-500"><i class="fas fa-user-minus"></i></button>` : ''}
+                </div>`).join('');
+        }
+
+        function addToCart(meal) {
+            const item = activeCart.find(i => i.id === meal.id);
+            if(item) item.qty++; else activeCart.push({...meal, qty: 1});
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items');
+            if(activeCart.length === 0) {
+                container.innerHTML = `<div class="text-center text-slate-300 mt-20 italic">القائمة فارغة</div>`;
+                document.getElementById('cart-total').innerText = "0";
+                return;
+            }
+            container.innerHTML = activeCart.map(i => `
+                <div class="bg-slate-50 p-3 rounded-2xl flex justify-between items-center border">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-orange-600 text-white w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold">${i.qty}</span>
+                        <p class="font-black text-slate-800 text-xs">${i.name}</p>
+                    </div>
+                    <span class="font-bold text-orange-600">${i.price * i.qty} ر.ي</span>
+                </div>`).join('');
+            document.getElementById('cart-total').innerText = activeCart.reduce((s, i) => s + (i.price * i.qty), 0);
+        }
+
+        function checkoutOrder() {
+            if(activeCart.length === 0) return;
+            const total = activeCart.reduce((s, i) => s + (i.price * i.qty), 0);
+            const sales = getData(KEY_SALES);
+            const order = { 
+                inv: Math.floor(1000 + Math.random() * 9000), 
+                total, 
+                cashier: userSession.name, 
+                time: new Date().toLocaleString('ar-SA'),
+                id: Date.now(),
+                items: [...activeCart]
+            };
+            sales.push(order);
+            saveData(KEY_SALES, sales);
+            printReceipt(order);
+            activeCart = [];
+            renderCart();
+            renderAll();
+        }
+
+        function printReceipt(order) {
+            const receiptArea = document.getElementById('print-receipt');
+            const itemsHtml = order.items.map(i => `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span>${i.name} (${i.qty})</span><span>${i.price * i.qty}</span></div>`).join('');
+            receiptArea.innerHTML = `
+                <div style="padding: 20px; text-align:center; font-family: 'Cairo', sans-serif;">
+                    <h2>SOFT ERB</h2>
+                    <p>الفاتورة: #${order.inv}</p>
+                    <p>التاريخ: ${order.time}</p>
+                    <hr>
+                    <div style="margin:10px 0;">${itemsHtml}</div>
+                    <hr>
+                    <div style="font-weight:bold; font-size:18px;">الإجمالي: ${order.total} ر.ي</div>
+                    <p style="margin-top:20px;">شكراً لزيارتكم!</p>
+                </div>`;
+            window.print();
+        }
+
+        function addNewMeal() {
+            const category = document.getElementById('meal-category').value.trim() || 'عام';
+            const name = document.getElementById('meal-name').value.trim();
+            const price = parseFloat(document.getElementById('meal-price').value);
+            
+            if(!name || isNaN(price)) { alert("يرجى إكمال بيانات الوجبة"); return; }
+            
+            const meals = getData(KEY_MEALS);
+            meals.push({ 
+                id: Date.now(), 
+                category, 
+                catImage: currentCatImageBase64, 
+                name, 
+                image: currentMealImageBase64, 
+                price 
+            });
+            saveData(KEY_MEALS, meals);
+            
+            // Reset
+            document.getElementById('meal-name').value = '';
+            document.getElementById('meal-price').value = '';
+            document.getElementById('category-image-file').value = '';
+            document.getElementById('meal-image-file').value = '';
+            document.getElementById('cat-file-label').innerText = "إختر صورة للقسم";
+            document.getElementById('meal-file-label').innerText = "إختر صورة للوجبة";
+            document.getElementById('cat-file-label').style = "";
+            document.getElementById('meal-file-label').style = "";
+            currentCatImageBase64 = '';
+            currentMealImageBase64 = '';
+            
+            renderAll();
+        }
+
+        function switchTab(t) {
+            document.querySelectorAll('main > div').forEach(d => d.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab', 'text-slate-500'));
+            document.getElementById(t + '-tab').classList.remove('hidden');
+            document.getElementById('btn-' + t).classList.add('active-tab');
+        }
+
+        function archiveTodaySales() {
+            if(confirm("هل أنت متأكد من ترحيل المبيعات؟ سيتم تصفير القائمة.")) {
+                saveData(KEY_SALES, []);
+                renderAll();
+            }
+        }
+
+        function exportToExcel() {
+            const sales = getData(KEY_SALES);
+            let csvContent = "data:text/csv;charset=utf-8,رقم الفاتورة,الوقت,المبلغ,الكاشير\n";
+            sales.forEach(s => {
+                csvContent += `${s.inv},${s.time},${s.total},${s.cashier}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "sales_report.csv");
+            document.body.appendChild(link);
+            link.click();
+        }
+
+        function deleteSale(id) { saveData(KEY_SALES, getData(KEY_SALES).filter(x => x.id !== id)); renderAll(); }
+        function deleteMeal(id) { saveData(KEY_MEALS, getData(KEY_MEALS).filter(x => x.id !== id)); renderAll(); }
+        
+        function addNewAccount() {
+            const name = document.getElementById('acc-name').value.trim();
+            const pass = document.getElementById('acc-pass').value.trim();
+            const role = document.getElementById('acc-role').value;
+            if(!name || !pass) return;
+            const a = getData(KEY_ACC);
+            a.push({ id: Date.now(), name, pass, role });
+            saveData(KEY_ACC, a);
+            renderAll();
+        }
+
+        function deleteAccount(id) { saveData(KEY_ACC, getData(KEY_ACC).filter(x => x.id !== id)); renderAll(); }
+
+        renderAll();
+    </script>
+</body>
+</html>
